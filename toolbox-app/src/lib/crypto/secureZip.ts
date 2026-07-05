@@ -5,6 +5,8 @@ const MAGIC_ENCRYPTED = new Uint8Array([0x4e, 0x49, 0x47, 0x41]);
 
 const MAGIC_ZIP = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
 
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+
 async function deriveKey(
 	password: string,
 	salt: Uint8Array,
@@ -34,12 +36,24 @@ export async function encryptFiles(
 	files: { name: string; data: ArrayBuffer }[],
 	password?: string
 ): Promise<ArrayBuffer> {
+	let totalSize = 0;
+	for (const file of files) {
+		totalSize += file.data.byteLength;
+	}
+	if (totalSize > MAX_FILE_SIZE) {
+		throw new Error('File size exceeds 100MB limit.');
+	}
+
 	// zip all files
 	const zipStructure: Record<string, Uint8Array> = {};
 	for (const file of files) {
 		zipStructure[file.name] = new Uint8Array(file.data);
 	}
 	const zippedData = zipSync(zipStructure);
+
+	if (zippedData.byteLength > MAX_FILE_SIZE) {
+		throw new Error('File size exceeds 100MB limit.');
+	}
 
 	if (!password || password.trim() === '') {
 		// no pwd, only for zip
@@ -66,13 +80,25 @@ export async function encryptFiles(
 
 	const ciphertext = new Uint8Array(encryptedData);
 
-	// combine metadata and cipher text
-	const result = new Uint8Array(salt.length + iv.length + ciphertext.length);
+	const totalLength = MAGIC_ENCRYPTED.length + salt.length + iv.length + ciphertext.length;
+	if (totalLength > MAX_FILE_SIZE) {
+		throw new Error('File size exceeds 100MB limit.');
+	}
 
-	result.set(MAGIC_ENCRYPTED, 0);
-	result.set(salt, 0);
-	result.set(iv, salt.length);
-	result.set(ciphertext, salt.length + iv.length);
+	// combine metadata and cipher text
+	const result = new Uint8Array(totalLength);
+	let offset = 0;
+
+	result.set(MAGIC_ENCRYPTED, offset);
+	offset += MAGIC_ENCRYPTED.length;
+
+	result.set(salt, offset);
+	offset += salt.length;
+
+	result.set(iv, offset);
+	offset += iv.length;
+
+	result.set(ciphertext, offset);
 
 	return result.buffer;
 }
@@ -81,6 +107,10 @@ export async function decryptFiles(
 	buffer: ArrayBuffer,
 	password?: string
 ): Promise<{ name: string; data: ArrayBuffer }[]> {
+	if (buffer.byteLength > MAX_FILE_SIZE) {
+		throw new Error('File size exceeds 100MB limit.');
+	}
+
 	const fullData = new Uint8Array(buffer);
 
 	if (fullData.length < 4) {

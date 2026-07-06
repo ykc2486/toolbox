@@ -21,7 +21,7 @@
     ] as const;
 </script>
 
-<nav class="sticky top-0 z-50 w-full border-b border-white/10 bg-zinc-950/50 backdrop-blur-xl transition-all duration-300">
+<nav class="sticky top-0 z-50 w-full border-b border-white/10 bg-zinc-950/50 backdrop-blur-xl transition-all duration-300 pt-[env(safe-area-inset-top,0px)]">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="flex h-16 items-center justify-between">
             

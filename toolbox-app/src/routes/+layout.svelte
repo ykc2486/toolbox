@@ -2,6 +2,7 @@
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { pwaInfo } from 'virtual:pwa-info';
+	import Navbar from '$lib/components/Navbar.svelte';
 
 	let { children } = $props();
 </script>
@@ -18,6 +19,7 @@
 </svelte:head>
 
 <div class="flex flex-col min-h-screen">
+	<Navbar />
 	<main class="flex-1">
 		{@render children()}
 	</main>

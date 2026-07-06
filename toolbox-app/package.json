@@ -6,16 +6,16 @@
 	"scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "preview": "npm run build && wrangler pages dev .svelte-kit/cloudflare",
-    "deploy": "npm run build && wrangler pages deploy .svelte-kit/cloudflare",
+    "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "lint": "prettier --check . && eslint .",
     "format": "prettier --write ."
-	},
+},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
+		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/adapter-cloudflare": "^7.2.9",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.63.0",

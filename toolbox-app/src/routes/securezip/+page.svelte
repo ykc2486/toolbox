@@ -321,7 +321,7 @@
 
 <!-- Dark background -->
 <div
-	class="min-h-dvh bg-[#0a0c10] text-zinc-100 flex flex-col items-center justify-center px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+24px)] sm:px-6 lg:px-8"
+	class="min-h-[calc(100dvh-4rem-env(safe-area-inset-top,0px))] bg-[#0a0c10] text-zinc-100 flex flex-col items-center justify-center px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+24px)] sm:px-6 lg:px-8"
 >
 	<!-- Soft glow -->
 	<div class="pointer-events-none fixed inset-0 overflow-hidden">

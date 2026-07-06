@@ -17,11 +17,11 @@ export default defineConfig({
 		SvelteKitPWA({
 			registerType: 'autoUpdate',
 			manifest: {
-				name: 'SecureZip Toolbox',
-				short_name: 'SecureZip',
-				description: 'Secure Archive Tool',
-				theme_color: '#09090b',
-				background_color: '#09090b',
+				name: 'ykc2486\'s Toolbox',
+				short_name: 'Toolbox',
+				description: 'Toolbox for tiny tools',
+				theme_color: '#0a0c10',
+				background_color: '#0a0c10',
 				display: 'standalone',
 				icons: [
 					{

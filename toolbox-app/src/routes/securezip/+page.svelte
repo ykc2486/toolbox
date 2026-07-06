@@ -34,6 +34,8 @@
 	let outputFile: OutputFile | null = $state(null);
 	let outputUrl = $state('');
 
+	let decryptedFilesList: { name: string; data: ArrayBuffer }[] = $state([]);
+
 	onMount(() => {
 		mounted = true;
 		return () => {
@@ -60,6 +62,7 @@
 			outputUrl = '';
 		}
 		outputFile = null;
+		decryptedFilesList = [];
 	}
 
 	function formatBytes(size: number) {
@@ -250,26 +253,56 @@
 			statusMessage = 'Reading archive and restoring the original files...';
 
 			const buffer = await decryptFile.arrayBuffer();
-			const files = await decryptFiles(buffer, decryptPassword);
 
-			const zipData = zipSync(
-				Object.fromEntries(files.map((file) => [file.name, new Uint8Array(file.data)]))
-			);
-			const packed = files.map((file) => `${file.name} (${formatBytes(file.data.byteLength)})`);
-			statusMessage = `Unlocked ${files.length} file${files.length > 1 ? 's' : ''}: ${packed.join(', ')}.`;
+			decryptedFilesList = await decryptFiles(buffer, decryptPassword);
+
+			statusMessage = `Unlocked ${decryptedFilesList.length} file${decryptedFilesList.length > 1 ? 's' : ''} successfully. Ready for download.`;
 			actionLabel = 'Archive unlocked';
-
-			createDownload(
-				decryptFile.name.replace(/\.(enc|zip)$/i, '') + '-restored.zip',
-				zipData.buffer.slice(zipData.byteOffset, zipData.byteOffset + zipData.byteLength)
-			);
-		} catch {
-			errorMessage = 'File may be corrupted or password is incorrect.';
+		} catch (error) {
+			errorMessage =
+				error instanceof Error ? error.message : 'File may be corrupted or password is incorrect.';
 			actionLabel = 'Error';
 			statusMessage = 'The archive could not be unlocked.';
 		} finally {
 			isBusy = false;
 		}
+	}
+
+	function downloadSingleFile(file: { name: string; data: ArrayBuffer }) {
+		const blob = new Blob([file.data], { type: 'application/octet-stream' });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = file.name;
+		link.click();
+		URL.revokeObjectURL(url);
+	}
+
+	function downloadAllAsZip() {
+		if (decryptedFilesList.length === 0) return;
+
+		if (decryptedFilesList.length === 1) {
+			downloadSingleFile(decryptedFilesList[0]);
+			return;
+		}
+
+		const zipStructure: Record<string, Uint8Array> = {};
+		for (const file of decryptedFilesList) {
+			zipStructure[file.name] = new Uint8Array(file.data);
+		}
+
+		const zippedData = zipSync(zipStructure);
+		const blob = new Blob([zippedData], { type: 'application/zip' });
+		const url = URL.createObjectURL(blob);
+
+		const link = document.createElement('a');
+		link.href = url;
+
+		const baseName = decryptFile ? decryptFile.name.replace(/\.(enc|zip)$/i, '') : 'archive';
+		link.download = `${baseName}-restored.zip`;
+
+		link.click();
+		URL.revokeObjectURL(url);
 	}
 
 	function downloadCurrentOutput() {
@@ -610,6 +643,44 @@
 					>
 						Unlock Archive
 					</button>
+					{#if decryptedFilesList.length > 0}
+						<div class="mt-6 space-y-3 animate-in fade-in duration-300">
+							<div class="flex items-center justify-between">
+								<span class="text-sm font-medium text-zinc-300">Unlocked Files</span>
+								<button
+									type="button"
+									onclick={downloadAllAsZip}
+									class="rounded-xl bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 px-3 py-1.5 text-xs font-semibold text-blue-400 transition-colors"
+								>
+									Download All (ZIP)
+								</button>
+							</div>
+
+							<div class="space-y-2 max-h-60 overflow-y-auto pr-1">
+								{#each decryptedFilesList as file (file.name)}
+									<div
+										class="flex items-center justify-between rounded-xl bg-zinc-900/80 px-4 py-2.5 border border-white/5"
+									>
+										<div class="flex flex-col overflow-hidden">
+											<span class="text-sm font-medium text-zinc-200 truncate pr-2"
+												>{file.name}</span
+											>
+											<span class="text-xs text-zinc-500 mt-0.5"
+												>{formatBytes(file.data.byteLength)}</span
+											>
+										</div>
+										<button
+											type="button"
+											onclick={() => downloadSingleFile(file)}
+											class="shrink-0 rounded-xl bg-zinc-700 hover:bg-zinc-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors"
+										>
+											Download
+										</button>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
 				</div>
 			{/if}
 		</section>

@@ -17,7 +17,7 @@ export default defineConfig({
 		SvelteKitPWA({
 			registerType: 'autoUpdate',
 			manifest: {
-				name: 'ykc2486\'s Toolbox',
+				name: "ykc2486's Toolbox",
 				short_name: 'Toolbox',
 				description: 'Toolbox for tiny tools',
 				theme_color: '#0a0c10',

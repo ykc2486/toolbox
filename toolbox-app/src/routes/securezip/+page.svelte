@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { zipSync } from 'fflate';
+	import zxcvbn from 'zxcvbn';
 	import { decryptFiles, encryptFiles } from '$lib/crypto/secureZip';
 
 	type OutputFile = {
@@ -66,6 +67,37 @@
 		const units = ['B', 'KB', 'MB', 'GB'];
 		const index = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
 		return `${(size / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+	}
+
+	function getPasswordStrength(password: string) {
+		if (!password) {
+			return { score: 0, label: 'Weak', hint: 'Add a password to enable encryption.' };
+		}
+
+		const result = zxcvbn(password);
+		const score = Math.round((result.score / 4) * 100);
+
+		if (result.score <= 1) {
+			return {
+				score,
+				label: 'Weak',
+				hint: result.feedback.warning || 'Use a longer password with less predictable patterns.'
+			};
+		}
+
+		if (result.score === 2) {
+			return {
+				score,
+				label: 'Moderate',
+				hint: result.feedback.warning || 'Add more length and avoid common words or patterns.'
+			};
+		}
+
+		return {
+			score,
+			label: 'Strong',
+			hint: result.feedback.warning || 'This password is a good fit for archive protection.'
+		};
 	}
 
 	// Encrypt handlers
@@ -231,7 +263,7 @@
 				decryptFile.name.replace(/\.(enc|zip)$/i, '') + '-restored.zip',
 				zipData.buffer.slice(zipData.byteOffset, zipData.byteOffset + zipData.byteLength)
 			);
-		} catch (error) {
+		} catch {
 			errorMessage = 'File may be corrupted or password is incorrect.';
 			actionLabel = 'Error';
 			statusMessage = 'The archive could not be unlocked.';
@@ -251,12 +283,12 @@
 </script>
 
 <svelte:head>
-	<title>SecureZip | Archive Tool</title>
+	<title>Toolbox | SecureZip</title>
 </svelte:head>
 
 <!-- Dark background -->
 <div
-	class="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-start pt-12 px-6 lg:px-8"
+	class="min-h-dvh bg-zinc-950 text-zinc-100 flex items-center justify-center px-4 py-6 sm:px-6 lg:px-8"
 >
 	<!-- Soft glow -->
 	<div class="pointer-events-none fixed inset-0 overflow-hidden">
@@ -453,6 +485,33 @@
 									placeholder="Enter a secure password"
 									class="block w-full rounded-xl border border-white/5 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
 								/>
+								<div class="mt-3 space-y-2">
+									{#if encryptPassword.trim()}
+										{@const passwordStrength = getPasswordStrength(encryptPassword.trim())}
+										<div class="flex items-center justify-between text-xs text-zinc-500">
+											<span>Password strength</span>
+											<span>{passwordStrength.label} · {passwordStrength.score}%</span>
+										</div>
+										<div class="h-2 overflow-hidden rounded-full bg-zinc-800">
+											<div
+												class={`h-full rounded-full transition-all duration-300 ${passwordStrength.score < 35 ? 'bg-rose-500' : passwordStrength.score < 70 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+												style={`width: ${passwordStrength.score}%`}
+											></div>
+										</div>
+										<p class="text-xs text-zinc-500">{passwordStrength.hint}</p>
+									{:else}
+										<div class="flex items-center justify-between text-xs text-zinc-500">
+											<span>Password strength</span>
+											<span>0%</span>
+										</div>
+										<div class="h-2 overflow-hidden rounded-full bg-zinc-800">
+											<div
+												class="h-full w-0 rounded-full bg-zinc-600 transition-all duration-300"
+											></div>
+										</div>
+										<p class="text-xs text-zinc-500">Add a password to see its strength.</p>
+									{/if}
+								</div>
 							</div>
 						{/if}
 					</div>

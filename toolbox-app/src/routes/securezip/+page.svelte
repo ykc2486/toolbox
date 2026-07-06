@@ -189,7 +189,7 @@
 
 			// Use the first 8 hash chars as the short name
 			const shortHash = hashHex.slice(0, 8);
-			const fileName = actualPassword ? `${shortHash}.niga` : `${shortHash}.zip`;
+			const fileName = actualPassword ? `${shortHash}.enc` : `${shortHash}.zip`;
 
 			createDownload(fileName, data);
 			statusMessage = `Archive ready. ${files.length} file${files.length > 1 ? 's' : ''} packed successfully.`;
@@ -228,11 +228,11 @@
 			actionLabel = 'Archive unlocked';
 
 			createDownload(
-				decryptFile.name.replace(/\.(niga|zip)$/i, '') + '-restored.zip',
+				decryptFile.name.replace(/\.(enc|zip)$/i, '') + '-restored.zip',
 				zipData.buffer.slice(zipData.byteOffset, zipData.byteOffset + zipData.byteLength)
 			);
 		} catch (error) {
-			errorMessage = error instanceof Error ? error.message : 'Failed to unlock archive.';
+			errorMessage = 'File may be corrupted or password is incorrect.';
 			actionLabel = 'Error';
 			statusMessage = 'The archive could not be unlocked.';
 		} finally {
@@ -256,7 +256,7 @@
 
 <!-- Dark background -->
 <div
-	class="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-6 lg:p-8"
+	class="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-start pt-12 px-6 lg:px-8"
 >
 	<!-- Soft glow -->
 	<div class="pointer-events-none fixed inset-0 overflow-hidden">
@@ -272,7 +272,7 @@
 		class={`relative z-10 w-full max-w-2xl transition-all duration-700 ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}
 	>
 		<!-- Header -->
-		<header class="mb-8 text-center">
+		<header class="mb-4 text-center">
 			<h1 class="text-3xl font-semibold tracking-tight text-white">SecureZip</h1>
 		</header>
 
@@ -495,7 +495,7 @@
 								<span
 									class={`text-xs mt-1 ${isDraggingDecrypt ? 'text-blue-400/70' : 'text-zinc-500'}`}
 								>
-									Supports .zip or .niga files
+									Supports .zip or .enc files
 								</span>
 							</label>
 						{:else}

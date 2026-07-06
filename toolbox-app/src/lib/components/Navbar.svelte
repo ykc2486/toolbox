@@ -28,8 +28,9 @@
                 href={resolve('/')} 
                 class="flex shrink-0 items-center gap-2 rounded-md px-2 py-1 -ml-2 text-xl font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-white/20"
             >
-                <span class="bg-linear-to-r from-zinc-100 to-zinc-400 bg-clip-text text-transparent hover:to-zinc-300">
-                    ykc2486-toolbox
+                <img src="src/lib/assets/favicon.svg" alt="Logo" class="h-8 w-8" />
+                <span class="silver-float bg-linear-to-r from-zinc-100 via-slate-200 via-45% to-zinc-400 bg-clip-text text-transparent tracking-wide drop-shadow-[0_2px_3px_rgba(0,0,0,0.55)] [text-shadow:0_0_6px_rgba(255,255,255,0.18)]">
+                    ykc2486's Toolbox
                 </span>
             </a>
 
@@ -100,3 +101,23 @@
         </div>
     {/if}
 </nav>
+
+<style>
+    @keyframes silver-float {
+        0% {
+            transform: translateY(0);
+        }
+
+        50% {
+            transform: translateY(-2px);
+        }
+
+        100% {
+            transform: translateY(0);
+        }
+    }
+
+    .silver-float {
+        animation: silver-float 4.5s ease-in-out infinite;
+    }
+</style>

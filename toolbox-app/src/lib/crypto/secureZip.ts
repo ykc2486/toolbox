@@ -168,7 +168,17 @@ export async function decryptFiles(
 		throw new Error('Unknown file format.');
 	}
 
-	const unzipped = unzipSync(zippedData);
+	let extractedSize = 0;
+	const unzipped = unzipSync(zippedData, {
+		filter: (file) => {
+			extractedSize += file.originalSize;
+			if (extractedSize > MAX_FILE_SIZE) {
+				throw new Error('Extracted files exceed 100MB limit.');
+			}
+
+			return true;
+		}
+	});
 
 	return Object.entries(unzipped).map(([name, data]) => {
 		const fileBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);

@@ -1,512 +1,575 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { zipSync } from 'fflate';
-    import { decryptFiles, encryptFiles } from '$lib/crypto/secureZip';
+	import { onMount } from 'svelte';
+	import { zipSync } from 'fflate';
+	import { decryptFiles, encryptFiles } from '$lib/crypto/secureZip';
 
-    type OutputFile = {
-        name: string;
-        data: ArrayBuffer;
-    };
+	type OutputFile = {
+		name: string;
+		data: ArrayBuffer;
+	};
 
-    let mounted = $state(false);
-    
-    // UI state
-    let currentMode = $state<'encrypt' | 'decrypt'>('encrypt');
-    
-    // File state
-    let encryptFilesList: File[] = $state([]);
-    let decryptFile: File | null = $state(null);
-    
-    // Drag state
-    let isDraggingEncrypt = $state(false);
-    let isDraggingDecrypt = $state(false);
-    
-    let isEncryptionEnabled = $state(false);
-    let encryptPassword = $state('');
-    let decryptPassword = $state('');
-    
-    let statusMessage = $state('Ready to package files into a secure archive.');
-    let errorMessage = $state('');
-    let isBusy = $state(false);
-    let actionLabel = $state('Idle');
-    
-    let outputFile: OutputFile | null = $state(null);
-    let outputUrl = $state('');
+	let mounted = $state(false);
 
-    onMount(() => {
-        mounted = true;
-        return () => {
-            if (outputUrl) {
-                URL.revokeObjectURL(outputUrl);
-            }
-        };
-    });
+	// UI state
+	let currentMode = $state<'encrypt' | 'decrypt'>('encrypt');
 
-    function switchMode(mode: 'encrypt' | 'decrypt') {
-        currentMode = mode;
-        resetOutput();
-        errorMessage = '';
-        actionLabel = 'Idle';
-        statusMessage = mode === 'encrypt' 
-            ? 'Ready to package files into a secure archive.' 
-            : 'Ready to unlock a protected archive.';
-    }
+	// File state
+	let encryptFilesList: File[] = $state([]);
+	let decryptFile: File | null = $state(null);
 
-    function resetOutput() {
-        if (outputUrl) {
-            URL.revokeObjectURL(outputUrl);
-            outputUrl = '';
-        }
-        outputFile = null;
-    }
+	// Drag state
+	let isDraggingEncrypt = $state(false);
+	let isDraggingDecrypt = $state(false);
 
-    function formatBytes(size: number) {
-        if (size === 0) return '0 B';
-        const units = ['B', 'KB', 'MB', 'GB'];
-        const index = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
-        return `${(size / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-    }
+	let isEncryptionEnabled = $state(false);
+	let encryptPassword = $state('');
+	let decryptPassword = $state('');
 
-    // Encrypt handlers
-    function addEncryptFiles(newFiles: File[]) {
-        const existingNames = new Set(encryptFilesList.map(f => f.name));
-        const uniqueNewFiles = newFiles.filter(f => !existingNames.has(f.name));
-        encryptFilesList = [...encryptFilesList, ...uniqueNewFiles];
-    }
+	let statusMessage = $state('Ready to package files into a secure archive.');
+	let errorMessage = $state('');
+	let isBusy = $state(false);
+	let actionLabel = $state('Idle');
 
-    function handleEncryptFileSelect(event: Event) {
-        const target = event.currentTarget as HTMLInputElement;
-        if (target.files && target.files.length > 0) {
-            addEncryptFiles(Array.from(target.files));
-        }
-        // Reset input so the same file can be chosen again.
-        target.value = '';
-    }
+	let outputFile: OutputFile | null = $state(null);
+	let outputUrl = $state('');
 
-    function handleDragOverEncrypt(e: DragEvent) {
-        e.preventDefault();
-        isDraggingEncrypt = true;
-    }
+	onMount(() => {
+		mounted = true;
+		return () => {
+			if (outputUrl) {
+				URL.revokeObjectURL(outputUrl);
+			}
+		};
+	});
 
-    function handleDragLeaveEncrypt(e: DragEvent) {
-        e.preventDefault();
-        isDraggingEncrypt = false;
-    }
+	function switchMode(mode: 'encrypt' | 'decrypt') {
+		currentMode = mode;
+		resetOutput();
+		errorMessage = '';
+		actionLabel = 'Idle';
+		statusMessage =
+			mode === 'encrypt'
+				? 'Ready to package files into a secure archive.'
+				: 'Ready to unlock a protected archive.';
+	}
 
-    function handleDropEncrypt(e: DragEvent) {
-        e.preventDefault();
-        isDraggingEncrypt = false;
-        if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-            addEncryptFiles(Array.from(e.dataTransfer.files));
-        }
-    }
+	function resetOutput() {
+		if (outputUrl) {
+			URL.revokeObjectURL(outputUrl);
+			outputUrl = '';
+		}
+		outputFile = null;
+	}
 
-    function removeEncryptFile(index: number) {
-        encryptFilesList = encryptFilesList.filter((_, i) => i !== index);
-    }
+	function formatBytes(size: number) {
+		if (size === 0) return '0 B';
+		const units = ['B', 'KB', 'MB', 'GB'];
+		const index = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
+		return `${(size / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+	}
 
-    // Decrypt handlers
-    function handleDecryptFileSelect(event: Event) {
-        const target = event.currentTarget as HTMLInputElement;
-        if (target.files && target.files.length > 0) {
-            decryptFile = target.files[0];
-        }
-        target.value = '';
-    }
+	// Encrypt handlers
+	function addEncryptFiles(newFiles: File[]) {
+		const existingNames = new Set(encryptFilesList.map((f) => f.name));
+		const duplicateNames = newFiles.filter((f) => existingNames.has(f.name)).map((f) => f.name);
+		const uniqueNewFiles = newFiles.filter((f) => !existingNames.has(f.name));
 
-    function handleDragOverDecrypt(e: DragEvent) {
-        e.preventDefault();
-        isDraggingDecrypt = true;
-    }
+		if (duplicateNames.length > 0) {
+			errorMessage = `Duplicate file name${duplicateNames.length > 1 ? 's' : ''} ignored: ${duplicateNames.join(', ')}.`;
+		}
 
-    function handleDragLeaveDecrypt(e: DragEvent) {
-        e.preventDefault();
-        isDraggingDecrypt = false;
-    }
+		encryptFilesList = [...encryptFilesList, ...uniqueNewFiles];
+	}
 
-    function handleDropDecrypt(e: DragEvent) {
-        e.preventDefault();
-        isDraggingDecrypt = false;
-        if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-            decryptFile = e.dataTransfer.files[0];
-        }
-    }
+	function handleEncryptFileSelect(event: Event) {
+		const target = event.currentTarget as HTMLInputElement;
+		if (target.files && target.files.length > 0) {
+			addEncryptFiles(Array.from(target.files));
+		}
+		// Reset input so the same file can be chosen again.
+		target.value = '';
+	}
 
-    function removeDecryptFile() {
-        decryptFile = null;
-    }
+	function handleDragOverEncrypt(e: DragEvent) {
+		e.preventDefault();
+		isDraggingEncrypt = true;
+	}
 
-    function createDownload(name: string, data: ArrayBuffer) {
-        const blob = new Blob([data], { type: 'application/octet-stream' });
-        outputUrl = URL.createObjectURL(blob);
-        outputFile = { name, data };
-    }
+	function handleDragLeaveEncrypt(e: DragEvent) {
+		e.preventDefault();
+		isDraggingEncrypt = false;
+	}
 
-    // Core actions
-    async function handleEncrypt() {
-        errorMessage = '';
-        resetOutput();
+	function handleDropEncrypt(e: DragEvent) {
+		e.preventDefault();
+		isDraggingEncrypt = false;
+		if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+			addEncryptFiles(Array.from(e.dataTransfer.files));
+		}
+	}
 
-        if (encryptFilesList.length === 0) {
-            errorMessage = 'Please choose at least one file to package.';
-            return;
-        }
+	function removeEncryptFile(index: number) {
+		encryptFilesList = encryptFilesList.filter((_, i) => i !== index);
+	}
 
-        if (isEncryptionEnabled && !encryptPassword.trim()) {
-            errorMessage = 'Please enter a password for encryption.';
-            return;
-        }
+	// Decrypt handlers
+	function handleDecryptFileSelect(event: Event) {
+		const target = event.currentTarget as HTMLInputElement;
+		if (target.files && target.files.length > 0) {
+			decryptFile = target.files[0];
+		}
+		target.value = '';
+	}
 
-        try {
-            isBusy = true;
-            actionLabel = 'Encrypting';
-            statusMessage = 'Compressing files and preparing the secure archive...';
+	function handleDragOverDecrypt(e: DragEvent) {
+		e.preventDefault();
+		isDraggingDecrypt = true;
+	}
 
-            const files = await Promise.all(
-                encryptFilesList.map(async (file) => ({
-                    name: file.name,
-                    data: await file.arrayBuffer()
-                }))
-            );
-            
-            const actualPassword = isEncryptionEnabled ? encryptPassword.trim() : '';
-            const data = await encryptFiles(files, actualPassword);
-            
-            // Hash all file names for the output name
-            const combinedNames = encryptFilesList.map(f => f.name).join('');
-            const msgBuffer = new TextEncoder().encode(combinedNames);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-            const hashHex = Array.from(new Uint8Array(hashBuffer))
-                .map(b => b.toString(16).padStart(2, '0'))
-                .join('');
-                
-            // Use the first 8 hash chars as the short name
-            const shortHash = hashHex.slice(0, 8);
-            const fileName = actualPassword ? `${shortHash}.niga` : `${shortHash}.zip`;
+	function handleDragLeaveDecrypt(e: DragEvent) {
+		e.preventDefault();
+		isDraggingDecrypt = false;
+	}
 
-            createDownload(fileName, data);
-            statusMessage = `Archive ready. ${files.length} file${files.length > 1 ? 's' : ''} packed successfully.`;
-            actionLabel = 'Archive ready';
-        } catch (error) {
-            errorMessage = error instanceof Error ? error.message : 'Failed to create archive.';
-            actionLabel = 'Error';
-            statusMessage = 'The package could not be created.';
-        } finally {
-            isBusy = false;
-        }
-    }
+	function handleDropDecrypt(e: DragEvent) {
+		e.preventDefault();
+		isDraggingDecrypt = false;
+		if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+			decryptFile = e.dataTransfer.files[0];
+		}
+	}
 
-    async function handleDecrypt() {
-        errorMessage = '';
-        resetOutput();
+	function removeDecryptFile() {
+		decryptFile = null;
+	}
 
-        if (!decryptFile) {
-            errorMessage = 'Please choose a zip or encrypted archive to unlock.';
-            return;
-        }
+	function createDownload(name: string, data: ArrayBuffer) {
+		const blob = new Blob([data], { type: 'application/octet-stream' });
+		outputUrl = URL.createObjectURL(blob);
+		outputFile = { name, data };
+	}
 
-        try {
-            isBusy = true;
-            actionLabel = 'Decrypting';
-            statusMessage = 'Reading archive and restoring the original files...';
+	// Core actions
+	async function handleEncrypt() {
+		errorMessage = '';
+		resetOutput();
 
-            const buffer = await decryptFile.arrayBuffer();
-            const files = await decryptFiles(buffer, decryptPassword);
+		if (encryptFilesList.length === 0) {
+			errorMessage = 'Please choose at least one file to package.';
+			return;
+		}
 
-            const zipData = zipSync(
-                Object.fromEntries(
-                    files.map((file) => [file.name, new Uint8Array(file.data)])
-                )
-            );
-            const packed = files.map((file) => `${file.name} (${formatBytes(file.data.byteLength)})`);
-            statusMessage = `Unlocked ${files.length} file${files.length > 1 ? 's' : ''}: ${packed.join(', ')}.`;
-            actionLabel = 'Archive unlocked';
+		if (isEncryptionEnabled && !encryptPassword.trim()) {
+			errorMessage = 'Please enter a password for encryption.';
+			return;
+		}
 
-            createDownload(
-                decryptFile.name.replace(/\.(niga|zip)$/i, '') + '-restored.zip',
-                zipData.buffer.slice(zipData.byteOffset, zipData.byteOffset + zipData.byteLength)
-            );
-        } catch (error) {
-            errorMessage = error instanceof Error ? error.message : 'Failed to unlock archive.';
-            actionLabel = 'Error';
-            statusMessage = 'The archive could not be unlocked.';
-        } finally {
-            isBusy = false;
-        }
-    }
+		try {
+			isBusy = true;
+			actionLabel = 'Encrypting';
+			statusMessage = 'Compressing files and preparing the secure archive...';
 
-    function downloadCurrentOutput() {
-        if (!outputUrl || !outputFile) return;
+			const files = await Promise.all(
+				encryptFilesList.map(async (file) => ({
+					name: file.name,
+					data: await file.arrayBuffer()
+				}))
+			);
 
-        const link = document.createElement('a');
-        link.href = outputUrl;
-        link.download = outputFile.name;
-        link.click();
-    }
+			const actualPassword = isEncryptionEnabled ? encryptPassword.trim() : '';
+			const data = await encryptFiles(files, actualPassword);
+
+			// Hash all file names for the output name
+			const combinedNames = encryptFilesList.map((f) => `${f.name}\0${f.size}`).join('\0');
+			const msgBuffer = new TextEncoder().encode(combinedNames);
+			const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+			const hashHex = Array.from(new Uint8Array(hashBuffer))
+				.map((b) => b.toString(16).padStart(2, '0'))
+				.join('');
+
+			// Use the first 8 hash chars as the short name
+			const shortHash = hashHex.slice(0, 8);
+			const fileName = actualPassword ? `${shortHash}.niga` : `${shortHash}.zip`;
+
+			createDownload(fileName, data);
+			statusMessage = `Archive ready. ${files.length} file${files.length > 1 ? 's' : ''} packed successfully.`;
+			actionLabel = 'Archive ready';
+		} catch (error) {
+			errorMessage = error instanceof Error ? error.message : 'Failed to create archive.';
+			actionLabel = 'Error';
+			statusMessage = 'The package could not be created.';
+		} finally {
+			isBusy = false;
+		}
+	}
+
+	async function handleDecrypt() {
+		errorMessage = '';
+		resetOutput();
+
+		if (!decryptFile) {
+			errorMessage = 'Please choose a zip or encrypted archive to unlock.';
+			return;
+		}
+
+		try {
+			isBusy = true;
+			actionLabel = 'Decrypting';
+			statusMessage = 'Reading archive and restoring the original files...';
+
+			const buffer = await decryptFile.arrayBuffer();
+			const files = await decryptFiles(buffer, decryptPassword);
+
+			const zipData = zipSync(
+				Object.fromEntries(files.map((file) => [file.name, new Uint8Array(file.data)]))
+			);
+			const packed = files.map((file) => `${file.name} (${formatBytes(file.data.byteLength)})`);
+			statusMessage = `Unlocked ${files.length} file${files.length > 1 ? 's' : ''}: ${packed.join(', ')}.`;
+			actionLabel = 'Archive unlocked';
+
+			createDownload(
+				decryptFile.name.replace(/\.(niga|zip)$/i, '') + '-restored.zip',
+				zipData.buffer.slice(zipData.byteOffset, zipData.byteOffset + zipData.byteLength)
+			);
+		} catch (error) {
+			errorMessage = error instanceof Error ? error.message : 'Failed to unlock archive.';
+			actionLabel = 'Error';
+			statusMessage = 'The archive could not be unlocked.';
+		} finally {
+			isBusy = false;
+		}
+	}
+
+	function downloadCurrentOutput() {
+		if (!outputUrl || !outputFile) return;
+
+		const link = document.createElement('a');
+		link.href = outputUrl;
+		link.download = outputFile.name;
+		link.click();
+	}
 </script>
 
 <svelte:head>
-    <title>SecureZip | Archive Tool</title>
+	<title>SecureZip | Archive Tool</title>
 </svelte:head>
 
 <!-- Dark background -->
-<div class="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-6 lg:p-8">
-    <!-- Soft glow -->
-    <div class="pointer-events-none fixed inset-0 overflow-hidden">
-        <div class="absolute left-1/4 top-0 h-96 w-96 -translate-y-1/2 rounded-full bg-blue-500/5 blur-[100px]"></div>
-        <div class="absolute right-1/4 bottom-0 h-96 w-96 translate-y-1/2 rounded-full bg-indigo-500/5 blur-[100px]"></div>
-    </div>
+<div
+	class="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-6 lg:p-8"
+>
+	<!-- Soft glow -->
+	<div class="pointer-events-none fixed inset-0 overflow-hidden">
+		<div
+			class="absolute left-1/4 top-0 h-96 w-96 -translate-y-1/2 rounded-full bg-blue-500/5 blur-[100px]"
+		></div>
+		<div
+			class="absolute right-1/4 bottom-0 h-96 w-96 translate-y-1/2 rounded-full bg-indigo-500/5 blur-[100px]"
+		></div>
+	</div>
 
-    <main class={`relative z-10 w-full max-w-2xl transition-all duration-700 ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-        
-        <!-- Header -->
-        <header class="mb-8 text-center">
-            <h1 class="text-3xl font-semibold tracking-tight text-white">
-                SecureZip
-            </h1>
-        </header>
+	<main
+		class={`relative z-10 w-full max-w-2xl transition-all duration-700 ${mounted ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}
+	>
+		<!-- Header -->
+		<header class="mb-8 text-center">
+			<h1 class="text-3xl font-semibold tracking-tight text-white">SecureZip</h1>
+		</header>
 
-        <!-- Status panel -->
-        <section class="mb-6 rounded-2xl border border-white/5 bg-zinc-800/50 p-5 shadow-lg shadow-black/20 backdrop-blur-xl">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <div class="flex items-center gap-2">
-                        <span class="relative flex h-2.5 w-2.5">
-                            {#if isBusy}
-                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
-                            {:else if actionLabel === 'Error'}
-                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                            {:else}
-                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-zinc-500"></span>
-                            {/if}
-                        </span>
-                        <p class="text-sm font-medium text-white">{actionLabel}</p>
-                    </div>
-                    <p class="mt-1 text-sm text-zinc-400">{statusMessage}</p>
-                </div>
+		<!-- Status panel -->
+		<section
+			class="mb-6 rounded-2xl border border-white/5 bg-zinc-800/50 p-5 shadow-lg shadow-black/20 backdrop-blur-xl"
+		>
+			<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+				<div>
+					<div class="flex items-center gap-2">
+						<span class="relative flex h-2.5 w-2.5">
+							{#if isBusy}
+								<span
+									class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"
+								></span>
+								<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+							{:else if actionLabel === 'Error'}
+								<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+							{:else}
+								<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-zinc-500"></span>
+							{/if}
+						</span>
+						<p class="text-sm font-medium text-white">{actionLabel}</p>
+					</div>
+					<p class="mt-1 text-sm text-zinc-400">{statusMessage}</p>
+				</div>
 
-                {#if outputFile}
-                    <button
-                        type="button"
-                        onclick={downloadCurrentOutput}
-                        class="shrink-0 rounded-xl bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
-                    >
-                        Download {outputFile.name}
-                    </button>
-                {/if}
-            </div>
+				{#if outputFile}
+					<button
+						type="button"
+						onclick={downloadCurrentOutput}
+						class="shrink-0 rounded-xl bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
+					>
+						Download {outputFile.name}
+					</button>
+				{/if}
+			</div>
 
-            {#if errorMessage}
-                <div class="mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-                    {errorMessage}
-                </div>
-            {/if}
-        </section>
+			{#if errorMessage}
+				<div
+					class="mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"
+				>
+					{errorMessage}
+				</div>
+			{/if}
+		</section>
 
-        <!-- Main card -->
-        <section class="rounded-3xl border border-white/5 bg-zinc-800/80 p-6 shadow-xl shadow-black/20 backdrop-blur-md">
-            
-            <!-- Mode toggle -->
-            <div class="relative mb-8 flex w-full rounded-xl bg-zinc-900/80 p-1 border border-white/5">
-                <!-- Sliding bar -->
-                <div 
-                    class="absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-lg bg-zinc-700 transition-transform duration-300 ease-out shadow-sm"
-                    style="transform: translateX({currentMode === 'decrypt' ? '100%' : '0'});"
-                ></div>
+		<!-- Main card -->
+		<section
+			class="rounded-3xl border border-white/5 bg-zinc-800/80 p-6 shadow-xl shadow-black/20 backdrop-blur-md"
+		>
+			<!-- Mode toggle -->
+			<div class="relative mb-8 flex w-full rounded-xl bg-zinc-900/80 p-1 border border-white/5">
+				<!-- Sliding bar -->
+				<div
+					class="absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-lg bg-zinc-700 transition-transform duration-300 ease-out shadow-sm"
+					style="transform: translateX({currentMode === 'decrypt' ? '100%' : '0'});"
+				></div>
 
-                <button
-                    class={`relative z-10 flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 ${currentMode === 'encrypt' ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
-                    onclick={() => switchMode('encrypt')}
-                >
-                    Encrypt (打包加密)
-                </button>
-                <button
-                    class={`relative z-10 flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 ${currentMode === 'decrypt' ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
-                    onclick={() => switchMode('decrypt')}
-                >
-                    Decrypt (解密還原)
-                </button>
-            </div>
+				<button
+					class={`relative z-10 flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 ${currentMode === 'encrypt' ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+					onclick={() => switchMode('encrypt')}
+				>
+					Encrypt
+				</button>
+				<button
+					class={`relative z-10 flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors duration-200 ${currentMode === 'decrypt' ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+					onclick={() => switchMode('decrypt')}
+				>
+					Decrypt
+				</button>
+			</div>
 
-            {#if currentMode === 'encrypt'}
-                <!-- Encrypt view -->
-                <div class="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div>
-                        <span class="block text-sm font-medium text-zinc-300 mb-2">Files to package</span>
-                        
-                        <!-- File picker -->
-                        <input
-                            type="file"
-                            id="encrypt-file-upload"
-                            multiple
-                            onchange={handleEncryptFileSelect}
-                            class="hidden"
-                        />
-                        <label 
-                            for="encrypt-file-upload" 
-                            ondragover={handleDragOverEncrypt}
-                            ondragleave={handleDragLeaveEncrypt}
-                            ondrop={handleDropEncrypt}
-                            class={`cursor-pointer flex flex-col items-center justify-center w-full rounded-2xl border border-dashed px-4 py-6 text-sm transition-colors ${isDraggingEncrypt ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-600 bg-zinc-900/30 hover:bg-zinc-700/30 hover:border-zinc-500'}`}
-                        >
-                            <span class={`font-medium ${isDraggingEncrypt ? 'text-blue-300' : 'text-zinc-300'}`}>
-                                {isDraggingEncrypt ? 'Drop files here' : 'Click or drag files here'}
-                            </span>
-                            <span class={`text-xs mt-1 ${isDraggingEncrypt ? 'text-blue-400/70' : 'text-zinc-500'}`}>
-                                You can select multiple files at once
-                            </span>
-                        </label>
+			{#if currentMode === 'encrypt'}
+				<!-- Encrypt view -->
+				<div class="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+					<div>
+						<span class="block text-sm font-medium text-zinc-300 mb-2">Files to package</span>
 
-                        <!-- Selected files -->
-                        {#if encryptFilesList.length > 0}
-                            <div class="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1">
-                                {#each encryptFilesList as file, index}
-                                    <div class="flex items-center justify-between rounded-xl bg-zinc-900/80 px-3 py-2 border border-white/5">
-                                        <div class="flex flex-col overflow-hidden">
-                                            <span class="text-sm text-zinc-300 truncate pr-2">{file.name}</span>
-                                            <span class="text-xs text-zinc-500">{formatBytes(file.size)}</span>
-                                        </div>
-                                        <button 
-                                            type="button" 
-                                            onclick={() => removeEncryptFile(index)} 
-                                            class="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors shrink-0"
-                                            aria-label="Remove file"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                        </button>
-                                    </div>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
+						<!-- File picker -->
+						<input
+							type="file"
+							id="encrypt-file-upload"
+							multiple
+							onchange={handleEncryptFileSelect}
+							class="hidden"
+						/>
+						<label
+							for="encrypt-file-upload"
+							ondragover={handleDragOverEncrypt}
+							ondragleave={handleDragLeaveEncrypt}
+							ondrop={handleDropEncrypt}
+							class={`cursor-pointer flex flex-col items-center justify-center w-full rounded-2xl border border-dashed px-4 py-6 text-sm transition-colors ${isDraggingEncrypt ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-600 bg-zinc-900/30 hover:bg-zinc-700/30 hover:border-zinc-500'}`}
+						>
+							<span class={`font-medium ${isDraggingEncrypt ? 'text-blue-300' : 'text-zinc-300'}`}>
+								{isDraggingEncrypt ? 'Drop files here' : 'Click or drag files here'}
+							</span>
+							<span
+								class={`text-xs mt-1 ${isDraggingEncrypt ? 'text-blue-400/70' : 'text-zinc-500'}`}
+							>
+								You can select multiple files at once
+							</span>
+						</label>
 
-                    <div class="rounded-2xl border border-white/5 bg-zinc-900/50 p-4 transition-colors hover:border-white/10">
-                        <div class="flex items-center justify-between">
-                            <button type="button" class="flex flex-col text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-md" onclick={() => isEncryptionEnabled = !isEncryptionEnabled}>
-                                <span class="text-sm font-medium text-zinc-300">Password Protection</span>
-                                <span class="text-xs text-zinc-500 mt-0.5">Encrypt with a secure password</span>
-                            </button>
-                            <button
-                                type="button"
-                                role="switch"
-                                aria-checked={isEncryptionEnabled}
-                                aria-label="Toggle password protection"
-                                onclick={() => isEncryptionEnabled = !isEncryptionEnabled}
-                                class={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 ${isEncryptionEnabled ? 'bg-blue-500' : 'bg-zinc-700'}`}
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    class={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isEncryptionEnabled ? 'translate-x-5' : 'translate-x-0'}`}
-                                ></span>
-                            </button>
-                        </div>
-                        
-                        {#if isEncryptionEnabled}
-                            <div class="mt-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                                <input
-                                    type="password"
-                                    bind:value={encryptPassword}
-                                    placeholder="Enter a secure password"
-                                    class="block w-full rounded-xl border border-white/5 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
-                                />
-                            </div>
-                        {/if}
-                    </div>
+						<!-- Selected files -->
+						{#if encryptFilesList.length > 0}
+							<div class="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1">
+								{#each encryptFilesList as file, index (file.name)}
+									<div
+										class="flex items-center justify-between rounded-xl bg-zinc-900/80 px-3 py-2 border border-white/5"
+									>
+										<div class="flex flex-col overflow-hidden">
+											<span class="text-sm text-zinc-300 truncate pr-2">{file.name}</span>
+											<span class="text-xs text-zinc-500">{formatBytes(file.size)}</span>
+										</div>
+										<button
+											type="button"
+											onclick={() => removeEncryptFile(index)}
+											class="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors shrink-0"
+											aria-label="Remove file"
+										>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												><line x1="18" y1="6" x2="6" y2="18"></line><line
+													x1="6"
+													y1="6"
+													x2="18"
+													y2="18"
+												></line></svg
+											>
+										</button>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
 
-                    <button
-                        type="button"
-                        disabled={isBusy || encryptFilesList.length === 0}
-                        onclick={handleEncrypt}
-                        class="w-full rounded-2xl bg-zinc-200 px-5 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 mt-4"
-                    >
-                        Create Archive
-                    </button>
-                </div>
-            {:else}
-                <!-- Decrypt view -->
-                <div class="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div>
-                        <span class="block text-sm font-medium text-zinc-300 mb-2">Select archive</span>
-                        
-                        <input
-                            type="file"
-                            id="decrypt-file-upload"
-                            onchange={handleDecryptFileSelect}
-                            class="hidden"
-                        />
-                        
-                        {#if !decryptFile}
-                            <label 
-                                for="decrypt-file-upload" 
-                                ondragover={handleDragOverDecrypt}
-                                ondragleave={handleDragLeaveDecrypt}
-                                ondrop={handleDropDecrypt}
-                                class={`cursor-pointer flex flex-col items-center justify-center w-full rounded-2xl border border-dashed px-4 py-6 text-sm transition-colors ${isDraggingDecrypt ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-600 bg-zinc-900/30 hover:bg-zinc-700/30 hover:border-zinc-500'}`}
-                            >
-                                <span class={`font-medium ${isDraggingDecrypt ? 'text-blue-300' : 'text-zinc-300'}`}>
-                                    {isDraggingDecrypt ? 'Drop archive here' : 'Click or drag archive here'}
-                                </span>
-                                <span class={`text-xs mt-1 ${isDraggingDecrypt ? 'text-blue-400/70' : 'text-zinc-500'}`}>
-                                    Supports .zip or .niga files
-                                </span>
-                            </label>
-                        {:else}
-                            <div class="flex items-center justify-between rounded-2xl bg-zinc-900/80 px-4 py-3 border border-white/5">
-                                <div class="flex flex-col overflow-hidden pr-4">
-                                    <span class="text-sm font-medium text-zinc-200 truncate">{decryptFile.name}</span>
-                                    <span class="text-xs text-zinc-500 mt-0.5">{formatBytes(decryptFile.size)}</span>
-                                </div>
-                                <button 
-                                    type="button" 
-                                    onclick={removeDecryptFile} 
-                                    class="p-2 text-zinc-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors shrink-0"
-                                    title="Choose another file"
-                                    aria-label="Remove selected archive"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                </button>
-                            </div>
-                        {/if}
-                    </div>
+					<div
+						class="rounded-2xl border border-white/5 bg-zinc-900/50 p-4 transition-colors hover:border-white/10"
+					>
+						<div class="flex items-center justify-between">
+							<button
+								type="button"
+								class="flex flex-col text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-md"
+								onclick={() => (isEncryptionEnabled = !isEncryptionEnabled)}
+							>
+								<span class="text-sm font-medium text-zinc-300">Password Protection</span>
+								<span class="text-xs text-zinc-500 mt-0.5">Encrypt with a secure password</span>
+							</button>
+							<button
+								type="button"
+								role="switch"
+								aria-checked={isEncryptionEnabled}
+								aria-label="Toggle password protection"
+								onclick={() => (isEncryptionEnabled = !isEncryptionEnabled)}
+								class={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 ${isEncryptionEnabled ? 'bg-blue-500' : 'bg-zinc-700'}`}
+							>
+								<span
+									aria-hidden="true"
+									class={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isEncryptionEnabled ? 'translate-x-5' : 'translate-x-0'}`}
+								></span>
+							</button>
+						</div>
 
-                    <label class="block">
-                        <span class="text-sm font-medium text-zinc-300">Password <span class="text-zinc-500 font-normal">(If needed)</span></span>
-                        <input
-                            type="password"
-                            bind:value={decryptPassword}
-                            placeholder="Required for protected archives"
-                            class="mt-2 block w-full rounded-2xl border border-white/5 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
-                        />
-                    </label>
+						{#if isEncryptionEnabled}
+							<div class="mt-4 animate-in fade-in slide-in-from-top-1 duration-200">
+								<input
+									type="password"
+									bind:value={encryptPassword}
+									placeholder="Enter a secure password"
+									class="block w-full rounded-xl border border-white/5 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+								/>
+							</div>
+						{/if}
+					</div>
 
-                    <button
-                        type="button"
-                        disabled={isBusy || !decryptFile}
-                        onclick={handleDecrypt}
-                        class="w-full rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 mt-4"
-                    >
-                        Unlock Archive
-                    </button>
-                </div>
-            {/if}
-        </section>
-    </main>
+					<button
+						type="button"
+						disabled={isBusy || encryptFilesList.length === 0}
+						onclick={handleEncrypt}
+						class="w-full rounded-2xl bg-zinc-200 px-5 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 mt-4"
+					>
+						Create Archive
+					</button>
+				</div>
+			{:else}
+				<!-- Decrypt view -->
+				<div class="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+					<div>
+						<span class="block text-sm font-medium text-zinc-300 mb-2">Select archive</span>
+
+						<input
+							type="file"
+							id="decrypt-file-upload"
+							onchange={handleDecryptFileSelect}
+							class="hidden"
+						/>
+
+						{#if !decryptFile}
+							<label
+								for="decrypt-file-upload"
+								ondragover={handleDragOverDecrypt}
+								ondragleave={handleDragLeaveDecrypt}
+								ondrop={handleDropDecrypt}
+								class={`cursor-pointer flex flex-col items-center justify-center w-full rounded-2xl border border-dashed px-4 py-6 text-sm transition-colors ${isDraggingDecrypt ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-600 bg-zinc-900/30 hover:bg-zinc-700/30 hover:border-zinc-500'}`}
+							>
+								<span
+									class={`font-medium ${isDraggingDecrypt ? 'text-blue-300' : 'text-zinc-300'}`}
+								>
+									{isDraggingDecrypt ? 'Drop archive here' : 'Click or drag archive here'}
+								</span>
+								<span
+									class={`text-xs mt-1 ${isDraggingDecrypt ? 'text-blue-400/70' : 'text-zinc-500'}`}
+								>
+									Supports .zip or .niga files
+								</span>
+							</label>
+						{:else}
+							<div
+								class="flex items-center justify-between rounded-2xl bg-zinc-900/80 px-4 py-3 border border-white/5"
+							>
+								<div class="flex flex-col overflow-hidden pr-4">
+									<span class="text-sm font-medium text-zinc-200 truncate">{decryptFile.name}</span>
+									<span class="text-xs text-zinc-500 mt-0.5">{formatBytes(decryptFile.size)}</span>
+								</div>
+								<button
+									type="button"
+									onclick={removeDecryptFile}
+									class="p-2 text-zinc-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors shrink-0"
+									title="Choose another file"
+									aria-label="Remove selected archive"
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="18"
+										height="18"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"
+										></line></svg
+									>
+								</button>
+							</div>
+						{/if}
+					</div>
+
+					<label class="block">
+						<span class="text-sm font-medium text-zinc-300"
+							>Password <span class="text-zinc-500 font-normal">(If needed)</span></span
+						>
+						<input
+							type="password"
+							bind:value={decryptPassword}
+							placeholder="Required for protected archives"
+							class="mt-2 block w-full rounded-2xl border border-white/5 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+						/>
+					</label>
+
+					<button
+						type="button"
+						disabled={isBusy || !decryptFile}
+						onclick={handleDecrypt}
+						class="w-full rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 mt-4"
+					>
+						Unlock Archive
+					</button>
+				</div>
+			{/if}
+		</section>
+	</main>
 </div>
 
 <style>
-    /* Custom scrollbar */
-    ::-webkit-scrollbar {
-        width: 6px;
-    }
-    ::-webkit-scrollbar-track {
-        background: transparent;
-    }
-    ::-webkit-scrollbar-thumb {
-        background: #3f3f46;
-        border-radius: 10px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-        background: #52525b;
-    }
+	/* Custom scrollbar */
+	::-webkit-scrollbar {
+		width: 6px;
+	}
+	::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	::-webkit-scrollbar-thumb {
+		background: #3f3f46;
+		border-radius: 10px;
+	}
+	::-webkit-scrollbar-thumb:hover {
+		background: #52525b;
+	}
 </style>

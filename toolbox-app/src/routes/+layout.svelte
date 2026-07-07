@@ -21,14 +21,14 @@
 <div class="flex flex-col min-h-svh">
 	<Navbar />
 
-	<main class="flex-1 pb-16">
+	<main class="flex-1 pb-12">
 		{@render children()}
 	</main>
 
 	<footer
 		class="fixed bottom-0 left-0 right-0 z-50 border-t border-white/5 bg-zinc-900/50 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
 	>
-		<div class="mx-auto max-w-7xl px-6 py-4 lg:px-8">
+		<div class="mx-auto max-w-7xl px-6 py-2 md:py-4 lg:px-8">
 			<div class="flex items-center justify-between">
 				<h3 class="text-sm font-semibold text-white">ykc2486-toolbox</h3>
 				<a

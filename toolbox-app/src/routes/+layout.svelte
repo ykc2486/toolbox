@@ -18,14 +18,17 @@
 	{/if}
 </svelte:head>
 
-<div class="flex flex-col min-h-screen">
+<div class="flex flex-col h-dvh overflow-hidden">
 	<Navbar />
-	<main class="flex-1">
+
+	<main class="flex-1 overflow-y-auto">
 		{@render children()}
 	</main>
 
 	<!-- Footer -->
-	<footer class="border-t border-white/5 bg-zinc-900/50 backdrop-blur-md">
+	<footer
+		class="border-t border-white/5 bg-zinc-900/50 backdrop-blur-md shrink-0 pb-[env(safe-area-inset-bottom)]"
+	>
 		<div class="mx-auto max-w-7xl px-6 py-4 lg:px-8">
 			<div class="flex items-center justify-between">
 				<h3 class="text-sm font-semibold text-white">ykc2486-toolbox</h3>

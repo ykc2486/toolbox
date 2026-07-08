@@ -16,8 +16,9 @@
 	});
 
 	const navLinks = [
-		{ href: '/', label: 'HomePage', external: false },
-		{ href: '/securezip', label: 'SecureZip', external: false }
+		{ href: '/', label: 'HomePage (TBD) ', external: false },
+		{ href: '/securezip', label: 'SecureZip', external: false },
+		{ href: '/ent', label: 'ENT', external: false }
 	] as const;
 </script>
 
